@@ -1,4 +1,6 @@
 import os
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity 
 
 class Params:
     def __init__(self, exp_name='prodict_review_prediction', random_seed=1337, all_data_size=40_000, train_frac=0.5):
@@ -33,3 +35,14 @@ def save_params(params, save_path, min_loss=None):
         
         if min_loss is not None:
             f.write('\nMinimal loss: ' + str(min_loss))
+                      
+def get_text_embedding(text, model):
+    words = text.lower().split() 
+    vectors = [model[word] for word in words if word in model]
+    if not vectors:
+        return np.zeros(model.vector_size) 
+    return np.mean(vectors, axis=0)
+
+
+def cosine_sim(vec1, vec2):
+    return cosine_similarity(vec1.reshape(1, -1), vec2.reshape(1, -1))[0][0]

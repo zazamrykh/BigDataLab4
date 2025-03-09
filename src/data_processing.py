@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 
 import utils
+from utils import cosine_sim, get_text_embedding
 
 def get_dataset(output=False, visualize=False, filename='distribution.png'):
     path = kagglehub.dataset_download("arhamrumi/amazon-product-reviews")
@@ -49,18 +50,6 @@ def get_dataset(output=False, visualize=False, filename='distribution.png'):
         plt.show()
     
     return df
-
-
-def get_text_embedding(text, model):
-    words = text.lower().split() 
-    vectors = [model[word] for word in words if word in model]
-    if not vectors:
-        return np.zeros(model.vector_size) 
-    return np.mean(vectors, axis=0)
-
-
-def cosine_sim(vec1, vec2):
-    return cosine_similarity(vec1.reshape(1, -1), vec2.reshape(1, -1))[0][0]
 
 
 def add_features(df):
