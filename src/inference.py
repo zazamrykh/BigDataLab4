@@ -17,8 +17,8 @@ def run(model=None, summary="", text="", HelpfulnessNumerator=1, HelpfulnessDeno
         model = CatBoostRegressor()
         model.load_model(model_path)
     
-    if output: print('Loading embeddings...')
     if word_vectors is None:
+        if output: print('Loading embeddings because it is not provided in input...')
         word_vectors = api.load("glove-wiki-gigaword-50")
     good_emb = word_vectors["good"]
     bad_emb = word_vectors["bad"]

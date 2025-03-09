@@ -11,8 +11,8 @@ from sklearn.model_selection import train_test_split
 import utils
 from utils import cosine_sim, get_text_embedding
 
-def get_dataset(output=False, visualize=False, filename='distribution.png'):
-    path = kagglehub.dataset_download("arhamrumi/amazon-product-reviews")
+def get_dataset(dataset_path=None, output=False, visualize=False, filename='distribution.png'):
+    path = kagglehub.dataset_download("arhamrumi/amazon-product-reviews") if dataset_path is None else dataset_path
     df = pd.read_csv(os.path.join(path, 'Reviews.csv')) 
 
     df = df.sample(frac=1, random_state=utils.params.random_seed).reset_index(drop=True)[:utils.params.all_data_size]
