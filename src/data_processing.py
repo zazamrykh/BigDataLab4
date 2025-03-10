@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import shutil
 import pandas as pd
 import kagglehub
 from sklearn.metrics.pairwise import cosine_similarity 
@@ -12,23 +13,28 @@ import utils
 from utils import cosine_sim, get_text_embedding
 
 def get_dataset(dataset_path=None, output=False, visualize=False, filename='distribution.png'):
+    if (not os.path.exists(".\\data")):
+        os.makedirs(".\\data")
+        
     path = kagglehub.dataset_download("arhamrumi/amazon-product-reviews") if dataset_path is None else dataset_path
     df = pd.read_csv(os.path.join(path, 'Reviews.csv')) 
 
+    shutil.copy(path + '\\Reviews.csv', ".\\data")
+    
     df = df.sample(frac=1, random_state=utils.params.random_seed).reset_index(drop=True)[:utils.params.all_data_size]
     
-    if output: print("🔹 Common information:")
+    if output: print("Common information:")
     if output: print(df.info())
 
     missing_values = df.isnull().sum()
-    if output: print("\n🔍 Nulls:")
+    if output: print("\nNulls:")
     if output: print(missing_values[missing_values > 0])
 
-    if output: print("\n📊 Data examples:")
+    if output: print("\nData examples:")
     if output: print(df.head())
 
-    df["ProfileName"].fillna("No text", inplace=True)
-    df["Summary"].fillna("No text", inplace=True)
+    df["ProfileName"] = df["ProfileName"].fillna("No text")
+    df["Summary"] = df["Summary"].fillna("No text")
 
     if output: print("\nNulls after filling:")
     null_sum_after_fill = df.isnull().sum()
@@ -37,7 +43,7 @@ def get_dataset(dataset_path=None, output=False, visualize=False, filename='dist
     assert null_sum_after_fill.sum() == 0
 
     plt.figure(figsize=(8, 5))
-    sns.countplot(x=df["Score"], palette="coolwarm")
+    sns.countplot(data=df, palette="coolwarm", legend=False)
     plt.title("Score distribution")
     plt.xlabel("Score")
     plt.ylabel("N reviews")
@@ -78,3 +84,9 @@ def split_df(df):
     print(f"Train: {X_train.shape}, Test: {X_test.shape}")
     
     return X_train, X_test, y_train, y_test
+
+
+if __name__ == '__main__':
+    df = get_dataset(filename='data/tgt_distrib.png')
+    add_features(df)
+    df.to_csv('data/Reviews_featurized.csv', index=False)

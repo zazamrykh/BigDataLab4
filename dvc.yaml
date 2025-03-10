@@ -1,0 +1,7 @@
+stages:
+  feature_extraction:
+    cmd: python src/data_processing.py
+    deps:
+      - src/data_processing.py
+    outs:
+      - data/Reviews_featurized.csv
