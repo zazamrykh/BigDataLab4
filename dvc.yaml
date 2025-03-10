@@ -5,3 +5,11 @@ stages:
       - src/data_processing.py
     outs:
       - data/Reviews_featurized.csv
+
+  train:
+    cmd: python src/train.py data/Reviews_featurized.csv
+    deps:
+      - src/train.py
+      - data/Reviews_featurized.csv
+    outs:
+      - models/model.cbm
