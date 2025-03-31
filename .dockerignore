@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.swp
+*.swo
+*.swn
+
+.dvc/
+.dvcignore
+dvc.lock
+dvc.yaml
+
+catboost_info/
+runs/
+!runs/train1/best_catboost_model.cbm  # Оставляем только нужную модель
+
+*.ipynb
+
+tests/
+
+.git/
+.gitignore
+.dockerignore

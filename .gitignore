@@ -1,3 +1,33 @@
-**/__pycache__/
-.pytest_cache
-.venv
+# Venvs
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+*.swp
+*.swo
+*.swn
+nohup.out
+
+# Catboost cache
+catboost_info/
+runs/
+!runs/train1/best_catboost_model.cbm  # Оставляем только модель
+
+# Notebook
+.ipynb_checkpoints/
+
+# Tests
+.pytest_cache/
+coverage/
+coverage.xml
+*.cover
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.iml

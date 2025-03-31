@@ -1,6 +1,9 @@
 '''
 Example of launch of model with 2 params:
 python src/inference.py ./runs/train1/best_catboost_model.cbm  "Very good!" "I really like that masterpiece!"
+
+Example of request sent using curl: 
+curl -X POST "http://127.0.0.1:8000/predict" -H "Content-Type: application/json" -d "{\"summary\": \"Great product!\", \"text\": \"This product works perfectly and I love it.\", \"HelpfulnessNumerator\": 5, \"HelpfulnessDenominator\": 7}"
 '''
 
 import os

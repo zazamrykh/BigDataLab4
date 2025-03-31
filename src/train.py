@@ -1,18 +1,26 @@
+"""
+python 
+"""
+
 from catboost import CatBoostRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import os
 import sys
+import pandas as pd
 
 import utils  # for params access
 from data_processing import get_dataset, add_features, split_df
 from utils import create_dirs, get_output_path, save_params
 
-def train(*args, **kvargs):
+def train(featured_path=None):
     create_dirs()
     output_path = get_output_path()
-    df = get_dataset(True, False, filename=output_path + 'tgt_distrib.png')
-    add_features(df)
+    if featured_path is None:
+        df = get_dataset(True, False, filename=output_path + 'tgt_distrib.png')
+        add_features(df)
+    else:
+        df = pd.read_csv(featured_path) 
     X_train, X_test, y_train, y_test = split_df(df)
     loss_after_train = train_catboost(X_train, X_test, y_train, y_test, hypoptim=False, save_dir=output_path)
     save_params(utils.params, output_path + 'params.txt', min_loss=loss_after_train)
@@ -50,11 +58,17 @@ def train_catboost(X_train, X_test, y_train, y_test, save_dir='./model', hypopti
     os.makedirs(save_dir, exist_ok=True)
 
     best_model = grid_search.best_estimator_
-    best_model.save_model(os.path.join(save_dir, 'best_catboost_model.cbm'))
+    best_model.save_model(os.path.join(save_dir, 'model.cbm'))
+    best_model.save_model(os.path.join('models', 'model.cbm'))  # for dvc
 
-    print(f"Model save in {os.path.join(save_dir, 'best_catboost_model.cbm')}")
+    print(f"Model save in {os.path.join(save_dir, 'model.cbm')} and in {os.path.join('models', 'model.cbm')}.")
     return mse
     
 if __name__ == '__main__':
     argv = sys.argv
-    train(argv)
+    if len(argv) == 2:
+        featured_path = argv[1]
+    else:
+        featured_path = None
+    train(featured_path=featured_path)
+    
