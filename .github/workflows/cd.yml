@@ -18,21 +18,23 @@ jobs:
         docker run -d -p 8000:8000 --name review_api ${{ secrets.DOCKERHUB_USERNAME }}/review_clf:latest
         sleep 10  # Подождать, пока сервис стартует
 
-    - name: Test inference endpoint
+    - name: Wait and test inference endpoint
       run: |
-        RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
-        -H "Content-Type: application/json" \
-        -d '{"summary": "Nice", "text": "Really good quality", "HelpfulnessNumerator": 3, "HelpfulnessDenominator": 4}')
-        
-        echo "Response: $RESPONSE"
+        echo "Waiting for the API to become ready..."
+        for i in {1..10}; do
+          sleep 10
+          echo "Attempt $i..."
+          RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
+            -H "Content-Type: application/json" \
+            -d '{"summary": "Nice", "text": "Really good quality", "HelpfulnessNumerator": 3, "HelpfulnessDenominator": 4}')
+          
+          echo "Response: $RESPONSE"
 
-        # Check if get number in response
-        if echo "$RESPONSE" | grep -Eq '[0-9.]'; then
-          echo "Inference successful"
-        else
-          echo "Invalid response"
-          exit 1
-        fi
+          if echo "$RESPONSE" | grep -Eq '[0-9.]'; then
+            echo "Inference successful"
+            exit 0
+          fi
+        done
 
-    - name: Stop container
-      run: docker stop review_api && docker rm review_api
+        echo "API did not respond correctly after multiple attempts"
+        exit 1
