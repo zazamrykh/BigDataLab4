@@ -1,6 +1,7 @@
 import os
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity 
+from sklearn.metrics.pairwise import cosine_similarity
+import configparser
 
 class Params:
     def __init__(self, exp_name='prodict_review_prediction', random_seed=1337, all_data_size=40_000, train_frac=0.5):
@@ -46,3 +47,8 @@ def get_text_embedding(text, model):
 
 def cosine_sim(vec1, vec2):
     return cosine_similarity(vec1.reshape(1, -1), vec2.reshape(1, -1))[0][0]
+
+def load_config(path="config.ini"):
+    config = configparser.ConfigParser()
+    config.read(path)
+    return config

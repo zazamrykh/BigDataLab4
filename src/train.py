@@ -10,6 +10,7 @@ import sys
 import pandas as pd
 
 import utils  # for params access
+from utils import load_config
 from data_processing import get_dataset, add_features, split_df
 from utils import create_dirs, get_output_path, save_params
 
@@ -26,18 +27,21 @@ def train(featured_path=None):
     save_params(utils.params, output_path + 'params.txt', min_loss=loss_after_train)
     
     
-def train_catboost(X_train, X_test, y_train, y_test, save_dir='./model', hypoptim=True):
+def train_catboost(X_train, X_test, y_train, y_test, save_dir='./runs/train1/', hypoptim=True):
+    config = load_config()
+    train_config = config['train']
+    
     if hypoptim:
         param_dict = { 
-            'depth': [4,  8],
+            'depth': [4, 8],
             'learning_rate': [0.03, 0.3],
             'l2_leaf_reg': [1, 5]
         }
     else:
         param_dict = { 
-            'depth': [8],
-            'learning_rate': [0.05],
-            'l2_leaf_reg': [1]
+            'depth': [int(train_config['depth'])],
+            'learning_rate': [float(train_config['learning_rate'])],
+            'l2_leaf_reg': [int(train_config['l2_leaf_reg'])]
         }
         
     model = CatBoostRegressor(loss_function='RMSE', cat_features=[])
