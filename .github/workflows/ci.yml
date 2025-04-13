@@ -37,3 +37,9 @@ jobs:
 
     - name: Push Docker image
       run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/review_clf
+
+    - name: Trigger CD pipeline
+      uses: peter-evans/workflow-dispatch@v1
+      with:
+        workflow: Deploy and Test Model Container
+        token: ${{ secrets.GITHUB_TOKEN }}
