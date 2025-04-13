@@ -12,8 +12,10 @@ dvc.lock
 dvc.yaml
 
 catboost_info/
-runs/
-!runs/train1/best_catboost_model.cbm  # Оставляем только нужную модель
+runs/*
+!runs/train1/
+runs/train1/*
+!runs/train1/best_catboost_model.cbm
 
 *.ipynb
 
