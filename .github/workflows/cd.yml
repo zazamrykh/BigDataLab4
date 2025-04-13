@@ -1,7 +1,7 @@
 name: Deploy and Test Model Container
 
 on:
-  workflow_dispatch:  # запуск вручную по кнопке
+  workflow_dispatch:  # запуск вручную
   schedule:
     - cron: '0 8 * * *'  # ежедневно в 8:00 UTC
 
@@ -16,7 +16,6 @@ jobs:
     - name: Run Docker container
       run: |
         docker run -d -p 8000:8000 --name review_api ${{ secrets.DOCKERHUB_USERNAME }}/review_clf:latest
-        sleep 10  # Подождать, пока сервис стартует
 
     - name: Wait and test inference endpoint
       run: |
@@ -27,14 +26,20 @@ jobs:
           RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
             -H "Content-Type: application/json" \
             -d '{"summary": "Nice", "text": "Really good quality", "HelpfulnessNumerator": 3, "HelpfulnessDenominator": 4}')
-          
+
           echo "Response: $RESPONSE"
 
-          if echo "$RESPONSE" | grep -Eq '[0-9.]'; then
+          if echo "$RESPONSE" | grep -Eq '^[0-9.]+$'; then
             echo "Inference successful"
             exit 0
           fi
         done
 
         echo "API did not respond correctly after multiple attempts"
+        echo "Showing logs from container:"
+        docker logs review_api
         exit 1
+
+    - name: Stop and remove container
+      if: always()
+      run: docker stop review_api && docker rm review_api
