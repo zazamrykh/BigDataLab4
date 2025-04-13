@@ -25,7 +25,8 @@ jobs:
           echo "Attempt $i..."
           RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
             -H "Content-Type: application/json" \
-            -d '{"summary": "Nice", "text": "Really good quality", "HelpfulnessNumerator": 3, "HelpfulnessDenominator": 4}')
+            -d '{"summary": "Nice", "text": "Really good quality", "HelpfulnessNumerator": 3, "HelpfulnessDenominator": 4}' || true)
+
 
           echo "Response: $RESPONSE"
 
