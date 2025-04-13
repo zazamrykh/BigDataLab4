@@ -118,7 +118,7 @@ pyparsing==3.2.1
 pytest==8.3.5
 python-dateutil==2.9.0.post0
 pytz==2025.1
-pywin32==309
+pywin32==309 ; sys_platform == "win32"
 PyYAML==6.0.2
 pyzmq==26.2.1
 referencing==0.36.2
