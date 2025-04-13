@@ -13,13 +13,13 @@ import utils
 from utils import cosine_sim, get_text_embedding
 
 def get_dataset(dataset_path=None, output=False, visualize=False, filename='distribution.png'):
-    if (not os.path.exists(".\\data")):
-        os.makedirs(".\\data")
+    if (not os.path.exists("./data")):
+        os.makedirs("./data")
         
     path = kagglehub.dataset_download("arhamrumi/amazon-product-reviews") if dataset_path is None else dataset_path
     df = pd.read_csv(os.path.join(path, 'Reviews.csv')) 
 
-    shutil.copy(path + '\\Reviews.csv', ".\\data")
+    shutil.copy(path + '/Reviews.csv', "./data")
     
     df = df.sample(frac=1, random_state=utils.params.random_seed).reset_index(drop=True)[:utils.params.all_data_size]
     
