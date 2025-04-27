@@ -27,8 +27,8 @@ jobs:
     - name: Pull Docker image
       run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/lab2-app:latest
 
-    - name: Start containers with docker-compose
-      run: docker-compose up -d
+    - name: Start containers with docker compose
+      run: docker compose up -d
         
     - name: Wait for services to be ready
       run: |
@@ -48,7 +48,7 @@ jobs:
           
           if [ $i -eq 30 ]; then
             echo "API did not become ready in time"
-            docker-compose logs
+            docker compose logs
             exit 1
           fi
         done
@@ -86,4 +86,4 @@ jobs:
 
     - name: Stop containers
       if: always()
-      run: docker-compose down
+      run: docker compose down
