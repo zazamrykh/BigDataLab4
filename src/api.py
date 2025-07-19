@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from catboost import CatBoostRegressor
 import gensim.downloader as api
-from inference import run
+from inference import InferenceEngine
 import database
 
 # Configure logging
@@ -73,13 +73,11 @@ class ReviewAPI:
                 logger.error(f"Model not found at path: {model_path}")
                 raise FileNotFoundError(f"Model not found: {model_path}")
 
-            logger.info("Loading word vectors...")
-            self.word_vectors = api.load("glove-wiki-gigaword-50")
-
-            logger.info("Loading CatBoost model...")
-            self.model = CatBoostRegressor()
-            self.model.load_model(model_path)
-            logger.info("Model loaded successfully")
+            logger.info("Initializing inference engine...")
+            self.engine = InferenceEngine(model_path)
+            self.word_vectors = self.engine.word_vectors
+            self.model = self.engine.model
+            logger.info("Inference engine ready")
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
             raise
@@ -97,14 +95,12 @@ class ReviewAPI:
         async def predict(data: InputData):
             logger.info(f"Received prediction request for text: {data.text[:50]}...")
             try:
-                prediction = run(
-                    model=self.model,
+                prediction = self.engine.predict(
                     summary=data.summary,
                     text=data.text,
                     HelpfulnessNumerator=data.HelpfulnessNumerator,
                     HelpfulnessDenominator=data.HelpfulnessDenominator,
-                    output=False,
-                    word_vectors=self.word_vectors,
+                    verbose=True
                 )
 
                 if self.db_connected:
