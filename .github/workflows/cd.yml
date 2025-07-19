@@ -1,21 +1,20 @@
 name: Deploy and Test Model Container
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 8 * * 1'  # Запуск каждый понедельник в 8:00 утра
+  workflow_dispatch:  # запуск вручную по кнопке
 
 jobs:
   deploy-and-test:
     runs-on: ubuntu-latest
 
     steps:
+<<<<<<< HEAD
     - name: Checkout repo
       uses: actions/checkout@v4
-      
+
     - name: Install jq
       run: sudo apt-get update && sudo apt-get install -y jq
-        
+
     - name: Create .env file
       run: |
         echo "DB_HOST=postgres" > .env
@@ -23,29 +22,29 @@ jobs:
         echo "DB_NAME=reviewdb" >> .env
         echo "DB_USER=postgres" >> .env
         echo "DB_PASSWORD=postgres" >> .env
-        
+
     - name: Pull Docker image
       run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/lab2-app:latest
 
     - name: Start containers with docker compose
       run: docker compose up -d
-        
+
     - name: Wait for services to be ready
       run: |
         echo "Waiting for services to be ready..."
         for i in {1..30}; do
           sleep 10
           echo "Attempt $i..."
-          
+
           # Check if API is ready
           HEALTH_RESPONSE=$(curl -s http://localhost:8000/health || true)
           echo "Health response: $HEALTH_RESPONSE"
-          
+
           if [[ "$HEALTH_RESPONSE" == *"healthy"* ]]; then
             echo "API is ready!"
             break
           fi
-          
+
           if [ $i -eq 30 ]; then
             echo "API did not become ready in time"
             docker compose logs
@@ -60,7 +59,7 @@ jobs:
         HEALTH_RESPONSE=$(curl -s http://localhost:8000/health)
         echo "Health response: $HEALTH_RESPONSE"
         echo "$HEALTH_RESPONSE" | jq .
-        
+
         # Test 2: Prediction endpoint
         echo "Test 2: Prediction endpoint"
         PREDICT_RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
@@ -68,14 +67,14 @@ jobs:
           -d '{"summary": "Great product!", "text": "This product works perfectly and I love it.", "HelpfulnessNumerator": 5, "HelpfulnessDenominator": 7}')
         echo "Prediction response: $PREDICT_RESPONSE"
         PREDICTION=$(echo "$PREDICT_RESPONSE" | jq -r '.prediction')
-        
+
         # Test 3: Check if prediction was saved in database
         echo "Test 3: Check if prediction was saved in database"
         sleep 2  # Wait for the prediction to be saved
         PREDICTIONS_RESPONSE=$(curl -s http://localhost:8000/predictions)
         echo "Predictions response: $PREDICTIONS_RESPONSE"
         PREDICTIONS_COUNT=$(echo "$PREDICTIONS_RESPONSE" | jq '.predictions | length')
-        
+
         # Check if all tests passed
         if [[ "$HEALTH_RESPONSE" == *"healthy"* ]] && [ -n "$PREDICTION" ] && [ "$PREDICTIONS_COUNT" -gt 0 ]; then
           echo "All functional tests passed!"
@@ -87,3 +86,31 @@ jobs:
     - name: Stop containers
       if: always()
       run: docker compose down
+=======
+    - name: Pull Docker image from DockerHub
+      run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/review_clf:latest
+
+    - name: Run Docker container
+      run: |
+        docker run -d -p 8000:8000 --name review_api ${{ secrets.DOCKERHUB_USERNAME }}/review_clf:latest
+        sleep 10  # Подождать, пока сервис стартует
+
+    - name: Test inference endpoint
+      run: |
+        RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
+        -H "Content-Type: application/json" \
+        -d '{"summary": "Nice", "text": "Really good quality", "HelpfulnessNumerator": 3, "HelpfulnessDenominator": 4}')
+
+        echo "Response: $RESPONSE"
+
+        # Check if get number in response
+        if echo "$RESPONSE" | grep -Eq '[0-9.]'; then
+          echo "Inference successful"
+        else
+          echo "Invalid response"
+          exit 1
+        fi
+
+    - name: Stop container
+      run: docker stop review_api && docker rm review_api
+>>>>>>> lab1/main

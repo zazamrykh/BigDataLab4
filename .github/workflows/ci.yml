@@ -6,8 +6,6 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:  # Позволяет запускать workflow вручную
-  schedule:
-    - cron: '0 0 * * 1'  # Запуск каждый понедельник в 00:00
 
 jobs:
   build-test-push:
@@ -25,7 +23,6 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        pip install -r docker_requirements.txt
         pip install pytest
 
     - name: Run unit tests

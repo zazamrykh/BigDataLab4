@@ -15,118 +15,165 @@ from pydantic import BaseModel
 from catboost import CatBoostRegressor
 import gensim.downloader as api
 from inference import run
-import database  # Import the database module
+import database
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Review Rating Prediction API",
-              description="API for predicting Amazon product review ratings with Oracle database integration",
-              version="2.0.0")
-word_vectors = None
-model = None
+class ReviewAPI:
+    """API for review prediction service with database integration"""
 
-class InputData(BaseModel):
-    summary: str
-    text: str
-    HelpfulnessNumerator: int = 1
-    HelpfulnessDenominator: int = 1
-
-@app.post("/predict")
-def predict(data: InputData):
-    try:
-        # Run prediction
-        prediction = run(
-            model=model,
-            summary=data.summary,
-            text=data.text,
-            HelpfulnessNumerator=data.HelpfulnessNumerator,
-            HelpfulnessDenominator=data.HelpfulnessDenominator,
-            output=False,
-            word_vectors=word_vectors,
+    def __init__(self, model_path=None, word_vectors=None):
+        """Initialize API with model path and word vectors"""
+        self.app = FastAPI(
+            title="Review Rating Prediction API",
+            description="API for predicting Amazon product review ratings with database integration",
+            version="2.0.0"
         )
-        
-        # Save prediction to Oracle database
+        self.model = None
+        self.word_vectors = word_vectors
+        self._setup_database()
+
+        if model_path:
+            self.load_model(model_path)
+
+        self._setup_routes()
+
+    def _setup_database(self):
+        """Initialize database connection"""
+        self.db_connected = False
+        max_db_connection_attempts = 5
+
+        for attempt in range(max_db_connection_attempts):
+            try:
+                logger.info(f"Attempting to connect to database (attempt {attempt + 1}/{max_db_connection_attempts})")
+                database.create_tables()
+                logger.info("Database tables created successfully")
+                self.db_connected = True
+                break
+            except Exception as e:
+                logger.error(f"Failed to create database tables (attempt {attempt + 1}): {e}")
+                if attempt < max_db_connection_attempts - 1:
+                    wait_time = 10  # seconds
+                    logger.info(f"Waiting {wait_time} seconds before retrying...")
+                    time.sleep(wait_time)
+
+        if not self.db_connected:
+            logger.warning(f"Failed to connect to database after {max_db_connection_attempts} attempts")
+            logger.warning("Continuing without database support")
+
+    def load_model(self, model_path):
+        """Load prediction model"""
         try:
-            database.save_prediction(
-                summary=data.summary,
-                text=data.text,
-                helpfulness_numerator=data.HelpfulnessNumerator,
-                helpfulness_denominator=data.HelpfulnessDenominator,
-                prediction=prediction
-            )
-            logger.info(f"Prediction saved to database: {prediction}")
+            if not os.path.exists(model_path):
+                logger.error(f"Model not found at path: {model_path}")
+                raise FileNotFoundError(f"Model not found: {model_path}")
+
+            logger.info("Loading word vectors...")
+            self.word_vectors = api.load("glove-wiki-gigaword-50")
+
+            logger.info("Loading CatBoost model...")
+            self.model = CatBoostRegressor()
+            self.model.load_model(model_path)
+            logger.info("Model loaded successfully")
         except Exception as e:
-            logger.error(f"Failed to save prediction to database: {e}")
-            # Continue even if database save fails
-        
-        return {"prediction": prediction}
-    except Exception as e:
-        logger.error(f"Error during prediction: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"Failed to load model: {str(e)}")
+            raise
 
-@app.get("/predictions")
-def get_predictions(limit: int = 10):
-    """
-    Get the latest predictions from the database.
-    """
-    try:
-        predictions = database.get_predictions(limit)
-        return {"predictions": predictions}
-    except Exception as e:
-        logger.error(f"Error retrieving predictions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    def _setup_routes(self):
+        """Configure API routes"""
 
-@app.get("/health")
-def health_check():
-    """
-    Health check endpoint to verify the API is running.
-    """
-    return {"status": "healthy", "model_loaded": model is not None}
+        class InputData(BaseModel):
+            summary: str
+            text: str
+            HelpfulnessNumerator: int = 1
+            HelpfulnessDenominator: int = 1
 
+        @self.app.post("/predict")
+        async def predict(data: InputData):
+            logger.info(f"Received prediction request for text: {data.text[:50]}...")
+            try:
+                prediction = run(
+                    model=self.model,
+                    summary=data.summary,
+                    text=data.text,
+                    HelpfulnessNumerator=data.HelpfulnessNumerator,
+                    HelpfulnessDenominator=data.HelpfulnessDenominator,
+                    output=False,
+                    word_vectors=self.word_vectors,
+                )
+
+                if self.db_connected:
+                    try:
+                        database.save_prediction(
+                            summary=data.summary,
+                            text=data.text,
+                            helpfulness_numerator=data.HelpfulnessNumerator,
+                            helpfulness_denominator=data.HelpfulnessDenominator,
+                            prediction=prediction
+                        )
+                        logger.info(f"Prediction saved to database: {prediction}")
+                    except Exception as e:
+                        logger.error(f"Failed to save prediction to database: {e}")
+                        # Continue even if database save fails
+
+                logger.info(f"Prediction completed: {prediction}")
+                return {"prediction": prediction}
+            except Exception as e:
+                logger.error(f"Prediction failed: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/predictions")
+        async def get_predictions(limit: int = 10):
+            """Get the latest predictions from the database."""
+            if not self.db_connected:
+                raise HTTPException(status_code=503, detail="Database not available")
+
+            try:
+                predictions = database.get_predictions(limit)
+                logger.info(f"Retrieved {len(predictions)} predictions from database")
+                return {"predictions": predictions}
+            except Exception as e:
+                logger.error(f"Error retrieving predictions: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/health")
+        async def health_check():
+            """Health check endpoint to verify the API is running."""
+            status = {
+                "status": "healthy",
+                "model_loaded": self.model is not None,
+                "database_connected": self.db_connected
+            }
+            logger.info(f"Health check: {status}")
+            return status
+
+        @self.app.on_event("startup")
+        async def startup_event():
+            logger.info("API server started")
+
+    def run(self, host="0.0.0.0", port=8000):
+        """Run the API server"""
+        import uvicorn
+        logger.info("Starting uvicorn server...")
+        uvicorn.run(self.app, host=host, port=port)
 
 if __name__ == "__main__":
-    argv = sys.argv
-    match(len(argv)):
-        case 1:
-            embdes = "glove-wiki-gigaword-50"
-            model_path = './runs/train1/best_catboost_model.cbm'
-        case 2:  # consider only model path is given
-            embdes = "glove-wiki-gigaword-50"
-            model_path = argv[1]
-        case 3:
-            word_vectors = argv[1]
-            model_path = argv[2]
+    try:
+        logger.info("Starting API service")
+        argv = sys.argv
 
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found that way: {model_path}")
-    
-    word_vectors = api.load("glove-wiki-gigaword-50")
-    model = CatBoostRegressor()
-    model.load_model(model_path)
-    
-    # Create database tables with multiple attempts
-    db_connected = False
-    max_db_connection_attempts = 5
-    
-    for attempt in range(max_db_connection_attempts):
-        try:
-            logger.info(f"Attempting to connect to database (attempt {attempt + 1}/{max_db_connection_attempts})")
-            database.create_tables()
-            logger.info("Database tables created successfully")
-            db_connected = True
-            break
-        except Exception as e:
-            logger.error(f"Failed to create database tables (attempt {attempt + 1}): {e}")
-            if attempt < max_db_connection_attempts - 1:
-                wait_time = 10  # seconds
-                logger.info(f"Waiting {wait_time} seconds before retrying...")
-                time.sleep(wait_time)
-    
-    if not db_connected:
-        logger.warning(f"Failed to connect to database after {max_db_connection_attempts} attempts")
-        logger.warning("Continuing without database support")
-    
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        if len(argv) == 1:
+            model_path = './runs/train1/best_catboost_model.cbm'
+        else:
+            model_path = argv[1] if len(argv) >= 2 else './runs/train1/best_catboost_model.cbm'
+
+        api = ReviewAPI(model_path)
+        api.run()
+    except Exception as e:
+        logger.error(f"API service failed: {str(e)}")
+        raise

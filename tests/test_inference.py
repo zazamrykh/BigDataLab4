@@ -1,26 +1,28 @@
 import pytest
-import numpy as np
 import os
 import sys
 
-from catboost import CatBoostRegressor
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-from inference import run
-import gensim.downloader as api
+from inference import InferenceEngine
 
 
-def test_run():
-    model_path = r'C:\Projects\itmo-dir\big-data\lab1\runs\train1\best_catboost_model.cbm'
+def test_inference():
+    model_path = os.path.join('runs', 'train1', 'best_catboost_model.cbm')
     if not os.path.exists(model_path):
-        return
+        pytest.skip("Model file not found, skipping test")
     
-    model = CatBoostRegressor()   
-    model.load_model(model_path)
-    
-    word_vectors = api.load("glove-wiki-gigaword-50")
-    
-    summary = "Very good!"
-    text = "Really very good!"
-    
-    run(model=model, summary=summary, text=text, word_vectors=word_vectors)
-    
+    try:
+        engine = InferenceEngine(model_path)
+        
+        summary = "Very good!"
+        text = "Really very good!"
+        
+        prediction = engine.predict(
+            summary=summary,
+            text=text,
+            verbose=False
+        )
+        
+        assert isinstance(prediction, float)
+    except Exception as e:
+        pytest.fail(f"Inference test failed: {str(e)}")

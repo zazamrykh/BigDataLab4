@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r docker_requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Download word vectors
 RUN python -c "import gensim.downloader as api; api.load('glove-wiki-gigaword-50')"
