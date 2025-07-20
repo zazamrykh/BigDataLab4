@@ -1,6 +1,30 @@
 version: '3'
 
 services:
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_ADDR=http://0.0.0.0:8200
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_PORT=${DB_PORT}
+    volumes:
+      - vault-data:/vault/data
+      - ./vault:/vault
+    cap_add:
+      - IPC_LOCK
+    entrypoint: sh -c "apk add --no-cache jq && /vault/start.sh"
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   postgres:
     image: postgres:16-alpine
     container_name: postgres
@@ -24,12 +48,15 @@ services:
     container_name: model-api
     depends_on:
       - postgres
+      - vault
     environment:
       - DB_HOST=postgres
       - DB_PORT=${DB_PORT}
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=root
     ports:
       - "8000:8000"
     command: ["python", "src/api.py"]
@@ -37,3 +64,4 @@ services:
 
 volumes:
   postgres-data:
+  vault-data:

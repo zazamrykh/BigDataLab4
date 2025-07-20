@@ -16,6 +16,7 @@ from catboost import CatBoostRegressor
 import gensim.downloader as api
 from inference import InferenceEngine
 import database
+import hvac
 
 # Configure logging
 logging.basicConfig(
@@ -25,23 +26,46 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class ReviewAPI:
-    """API for review prediction service with database integration"""
+    """API for review prediction service with database integration and Vault secret management"""
 
     def __init__(self, model_path=None, word_vectors=None):
         """Initialize API with model path and word vectors"""
         self.app = FastAPI(
             title="Review Rating Prediction API",
-            description="API for predicting Amazon product review ratings with database integration",
-            version="2.0.0"
+            description="API for predicting Amazon product review ratings with Vault secret management",
+            version="3.0.0"
         )
         self.model = None
         self.word_vectors = word_vectors
+        self.vault_client = None
+        self.vault_connected = False
+
+        # Initialize Vault client
+        self._setup_vault()
+
+        # Initialize database connection
         self._setup_database()
 
         if model_path:
             self.load_model(model_path)
 
         self._setup_routes()
+
+    def _setup_vault(self):
+        """Initialize Vault client"""
+        try:
+            # Get Vault client from database module
+            self.vault_client = database.get_vault_client()
+
+            if self.vault_client and self.vault_client.is_authenticated():
+                self.vault_connected = True
+                logger.info("Successfully connected to Vault")
+            else:
+                logger.warning("Failed to connect to Vault or not authenticated")
+                self.vault_connected = False
+        except Exception as e:
+            logger.error(f"Error setting up Vault client: {e}")
+            self.vault_connected = False
 
     def _setup_database(self):
         """Initialize database connection"""
@@ -143,10 +167,30 @@ class ReviewAPI:
             status = {
                 "status": "healthy",
                 "model_loaded": self.model is not None,
-                "database_connected": self.db_connected
+                "database_connected": self.db_connected,
+                "vault_connected": self.vault_connected
             }
             logger.info(f"Health check: {status}")
             return status
+
+        @self.app.get("/vault-status")
+        async def vault_status():
+            """Check Vault status and connection."""
+            if not self.vault_connected:
+                raise HTTPException(status_code=503, detail="Vault not available")
+
+            try:
+                # Check if we can access Vault
+                vault_status = {
+                    "connected": self.vault_connected,
+                    "authenticated": self.vault_client.is_authenticated() if self.vault_client else False,
+                    "secrets_engine": "Available" if self.vault_client and self.vault_client.sys.list_mounted_secrets_engines() else "Not available"
+                }
+                logger.info(f"Vault status: {vault_status}")
+                return vault_status
+            except Exception as e:
+                logger.error(f"Error checking Vault status: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.on_event("startup")
         async def startup_event():

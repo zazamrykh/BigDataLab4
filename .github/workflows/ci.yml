@@ -1,4 +1,4 @@
-name: Build, Test and Push Docker Image
+name: Build, Test and Push Docker Image with Vault Integration
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
       run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
     - name: Build Docker image
-      run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/lab2-app:latest .
+      run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/lab3-vault-app:latest .
 
     - name: Push Docker image
-      run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/lab2-app:latest
+      run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/lab3-vault-app:latest

@@ -1,4 +1,4 @@
-name: Deploy and Test Model Container
+name: Deploy and Test Model Container with Vault Integration
 
 on:
   workflow_dispatch:  # запуск вручную по кнопке
@@ -14,16 +14,17 @@ jobs:
     - name: Install jq
       run: sudo apt-get update && sudo apt-get install -y jq
 
-    - name: Create .env file
+    - name: Create temporary .env file for initialization
       run: |
         echo "DB_HOST=postgres" > .env
         echo "DB_PORT=5432" >> .env
         echo "DB_NAME=reviewdb" >> .env
         echo "DB_USER=postgres" >> .env
         echo "DB_PASSWORD=postgres" >> .env
+        echo "VAULT_ADDR=http://vault:8200" >> .env
 
     - name: Pull Docker image
-      run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/lab2-app:latest
+      run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/lab3-vault-app:latest
 
     - name: Start containers with docker compose
       run: docker compose up -d
@@ -59,23 +60,50 @@ jobs:
         echo "Health response: $HEALTH_RESPONSE"
         echo "$HEALTH_RESPONSE" | jq .
 
-        # Test 2: Prediction endpoint
-        echo "Test 2: Prediction endpoint"
+        # Check if Vault is connected in health check
+        VAULT_CONNECTED=$(echo "$HEALTH_RESPONSE" | jq -r '.vault_connected')
+        if [ "$VAULT_CONNECTED" = "true" ]; then
+          echo "Vault connection verified in health check!"
+        else
+          echo "Vault connection not verified in health check!"
+          docker compose logs vault
+          exit 1
+        fi
+
+        # Test 2: Vault status endpoint
+        echo "Test 2: Vault status endpoint"
+        VAULT_STATUS_RESPONSE=$(curl -s http://localhost:8000/vault-status || echo '{"error": "Failed to connect"}')
+        echo "Vault status response: $VAULT_STATUS_RESPONSE"
+
+        if [[ "$VAULT_STATUS_RESPONSE" == *"connected"*"true"* ]]; then
+          echo "Vault status endpoint working correctly!"
+        else
+          echo "Vault status endpoint not working correctly!"
+          docker compose logs vault
+          exit 1
+        fi
+
+        # Test 3: Prediction endpoint
+        echo "Test 3: Prediction endpoint"
         PREDICT_RESPONSE=$(curl -s -X POST "http://localhost:8000/predict" \
           -H "Content-Type: application/json" \
           -d '{"summary": "Great product!", "text": "This product works perfectly and I love it.", "HelpfulnessNumerator": 5, "HelpfulnessDenominator": 7}')
         echo "Prediction response: $PREDICT_RESPONSE"
         PREDICTION=$(echo "$PREDICT_RESPONSE" | jq -r '.prediction')
 
-        # Test 3: Check if prediction was saved in database
-        echo "Test 3: Check if prediction was saved in database"
+        # Test 4: Check if prediction was saved in database
+        echo "Test 4: Check if prediction was saved in database"
         sleep 2  # Wait for the prediction to be saved
         PREDICTIONS_RESPONSE=$(curl -s http://localhost:8000/predictions)
         echo "Predictions response: $PREDICTIONS_RESPONSE"
         PREDICTIONS_COUNT=$(echo "$PREDICTIONS_RESPONSE" | jq '.predictions | length')
 
         # Check if all tests passed
-        if [[ "$HEALTH_RESPONSE" == *"healthy"* ]] && [ -n "$PREDICTION" ] && [ "$PREDICTIONS_COUNT" -gt 0 ]; then
+        if [[ "$HEALTH_RESPONSE" == *"healthy"* ]] &&
+           [ "$VAULT_CONNECTED" = "true" ] &&
+           [[ "$VAULT_STATUS_RESPONSE" == *"connected"*"true"* ]] &&
+           [ -n "$PREDICTION" ] &&
+           [ "$PREDICTIONS_COUNT" -gt 0 ]; then
           echo "All functional tests passed!"
         else
           echo "Some functional tests failed!"
