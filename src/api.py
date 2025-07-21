@@ -72,39 +72,56 @@ class ReviewAPI:
             logger.error(f"Error setting up Vault client: {e}")
             self.vault_connected = False
 
-    def _setup_kafka(self):
-        """Initialize Kafka producer"""
-        try:
-            # Get Kafka credentials from Vault
-            if self.vault_connected:
-                try:
-                    kafka_creds = self.vault_client.secrets.kv.v2.read_secret_version(
-                        path='kafka/credentials',
-                        mount_point='kv'
-                    )
-                    if kafka_creds and 'data' in kafka_creds and 'data' in kafka_creds['data']:
-                        bootstrap_servers = kafka_creds['data']['data'].get('bootstrap_servers', 'kafka:9092')
-                        logger.info(f"Using Kafka credentials from Vault")
-                    else:
-                        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-                        logger.warning("Failed to retrieve Kafka credentials from Vault, using environment variables")
-                except Exception as e:
-                    bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-                    logger.error(f"Error retrieving Kafka credentials from Vault: {e}")
-            else:
-                bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-                logger.warning("Vault not connected, using environment variables for Kafka")
+    def _get_kafka_credentials(self):
+        """Get Kafka credentials from Vault or environment variables"""
+        if self.vault_connected:
+            try:
+                # Read Kafka credentials from Vault
+                kafka_creds = self.vault_client.secrets.kv.v2.read_secret_version(
+                    path='kafka/credentials',
+                    mount_point='kv'
+                )
+                if kafka_creds and 'data' in kafka_creds and 'data' in kafka_creds['data']:
+                    bootstrap_servers = kafka_creds['data']['data'].get('bootstrap_servers', 'kafka:9092')
+                    logger.info(f"Using Kafka credentials from Vault")
+                    return bootstrap_servers
+                else:
+                    logger.warning("Failed to retrieve Kafka credentials from Vault, using environment variables")
+            except Exception as e:
+                logger.error(f"Error retrieving Kafka credentials from Vault: {e}")
 
-            # Create Kafka producer
-            self.kafka_producer = KafkaProducer(
-                bootstrap_servers=bootstrap_servers,
-                value_serializer=lambda v: json.dumps(v).encode('utf-8')
-            )
-            logger.info(f"Successfully connected to Kafka at {bootstrap_servers}")
-            self.kafka_connected = True
-        except Exception as e:
-            logger.error(f"Error setting up Kafka producer: {e}")
-            self.kafka_connected = False
+        # Fall back to environment variables
+        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+        logger.warning("Using environment variables for Kafka")
+        return bootstrap_servers
+
+    def _setup_kafka(self):
+        """Initialize Kafka producer with retry mechanism"""
+        max_retries = 10
+        retry_delay = 5
+
+        for attempt in range(max_retries):
+            try:
+                # Get Kafka credentials
+                bootstrap_servers = self._get_kafka_credentials()
+                logger.info(f"Connecting to Kafka at {bootstrap_servers} (attempt {attempt + 1}/{max_retries})")
+
+                # Create Kafka producer
+                self.kafka_producer = KafkaProducer(
+                    bootstrap_servers=bootstrap_servers,
+                    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+                )
+                logger.info(f"Successfully connected to Kafka at {bootstrap_servers}")
+                self.kafka_connected = True
+                return
+            except Exception as e:
+                logger.error(f"Failed to connect to Kafka (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+
+        logger.error(f"Failed to connect to Kafka after {max_retries} attempts")
+        self.kafka_connected = False
 
 
     def load_model(self, model_path):

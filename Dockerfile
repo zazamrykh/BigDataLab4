@@ -1,6 +1,6 @@
 # docker build -t review_clf .
 # docker run -p 8000:8000 review_clf
-FROM python:3.12.2-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 

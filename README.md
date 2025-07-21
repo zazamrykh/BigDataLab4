@@ -69,3 +69,14 @@ This script will:
 - In production, Vault should be properly configured with appropriate authentication methods and policies
 - The Vault token used by the applications should be rotated regularly
 - Kafka should be properly secured in production with authentication and encryption
+
+
+## Test scenario
+
+- sudo docker compose down
+- sudo docker compose up -d (--build)
+- sudo docker compose ps
+- curl -X POST "http://localhost:8000/predict" -H "Content-Type: application/json" -d '{"text": "This product is terrible!", "summary": "Product review"}'
+- sudo docker compose -f docker-compose.yml logs --tail=20 app
+- sudo docker compose -f docker-compose.yml logs --tail=20 db-consumer
+- 
