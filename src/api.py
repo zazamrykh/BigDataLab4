@@ -9,6 +9,8 @@ import os
 import sys
 import time
 import logging
+import json
+import datetime
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -17,6 +19,7 @@ import gensim.downloader as api
 from inference import InferenceEngine
 import database
 import hvac
+from kafka import KafkaProducer
 
 # Configure logging
 logging.basicConfig(
@@ -26,25 +29,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class ReviewAPI:
-    """API for review prediction service with database integration and Vault secret management"""
+    """API for review prediction service with Kafka integration and Vault secret management"""
 
     def __init__(self, model_path=None, word_vectors=None):
         """Initialize API with model path and word vectors"""
         self.app = FastAPI(
             title="Review Rating Prediction API",
-            description="API for predicting Amazon product review ratings with Vault secret management",
-            version="3.0.0"
+            description="API for predicting Amazon product review ratings with Kafka and Vault integration",
+            version="4.0.0"
         )
         self.model = None
         self.word_vectors = word_vectors
         self.vault_client = None
         self.vault_connected = False
+        self.kafka_producer = None
+        self.kafka_connected = False
 
         # Initialize Vault client
         self._setup_vault()
 
-        # Initialize database connection
-        self._setup_database()
+        # Initialize Kafka producer
+        self._setup_kafka()
 
         if model_path:
             self.load_model(model_path)
@@ -67,28 +72,40 @@ class ReviewAPI:
             logger.error(f"Error setting up Vault client: {e}")
             self.vault_connected = False
 
-    def _setup_database(self):
-        """Initialize database connection"""
-        self.db_connected = False
-        max_db_connection_attempts = 5
+    def _setup_kafka(self):
+        """Initialize Kafka producer"""
+        try:
+            # Get Kafka credentials from Vault
+            if self.vault_connected:
+                try:
+                    kafka_creds = self.vault_client.secrets.kv.v2.read_secret_version(
+                        path='kafka/credentials',
+                        mount_point='kv'
+                    )
+                    if kafka_creds and 'data' in kafka_creds and 'data' in kafka_creds['data']:
+                        bootstrap_servers = kafka_creds['data']['data'].get('bootstrap_servers', 'kafka:9092')
+                        logger.info(f"Using Kafka credentials from Vault")
+                    else:
+                        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+                        logger.warning("Failed to retrieve Kafka credentials from Vault, using environment variables")
+                except Exception as e:
+                    bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+                    logger.error(f"Error retrieving Kafka credentials from Vault: {e}")
+            else:
+                bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+                logger.warning("Vault not connected, using environment variables for Kafka")
 
-        for attempt in range(max_db_connection_attempts):
-            try:
-                logger.info(f"Attempting to connect to database (attempt {attempt + 1}/{max_db_connection_attempts})")
-                database.create_tables()
-                logger.info("Database tables created successfully")
-                self.db_connected = True
-                break
-            except Exception as e:
-                logger.error(f"Failed to create database tables (attempt {attempt + 1}): {e}")
-                if attempt < max_db_connection_attempts - 1:
-                    wait_time = 10  # seconds
-                    logger.info(f"Waiting {wait_time} seconds before retrying...")
-                    time.sleep(wait_time)
+            # Create Kafka producer
+            self.kafka_producer = KafkaProducer(
+                bootstrap_servers=bootstrap_servers,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8')
+            )
+            logger.info(f"Successfully connected to Kafka at {bootstrap_servers}")
+            self.kafka_connected = True
+        except Exception as e:
+            logger.error(f"Error setting up Kafka producer: {e}")
+            self.kafka_connected = False
 
-        if not self.db_connected:
-            logger.warning(f"Failed to connect to database after {max_db_connection_attempts} attempts")
-            logger.warning("Continuing without database support")
 
     def load_model(self, model_path):
         """Load prediction model"""
@@ -127,19 +144,24 @@ class ReviewAPI:
                     verbose=True
                 )
 
-                if self.db_connected:
+                # Send prediction to Kafka
+                if self.kafka_connected:
                     try:
-                        database.save_prediction(
-                            summary=data.summary,
-                            text=data.text,
-                            helpfulness_numerator=data.HelpfulnessNumerator,
-                            helpfulness_denominator=data.HelpfulnessDenominator,
-                            prediction=prediction
-                        )
-                        logger.info(f"Prediction saved to database: {prediction}")
+                        message = {
+                            "summary": data.summary,
+                            "text": data.text,
+                            "helpfulness_numerator": data.HelpfulnessNumerator,
+                            "helpfulness_denominator": data.HelpfulnessDenominator,
+                            "prediction": float(prediction),
+                            "timestamp": datetime.datetime.now().isoformat()
+                        }
+                        self.kafka_producer.send('predictions', message)
+                        logger.info(f"Prediction sent to Kafka topic 'predictions'")
                     except Exception as e:
-                        logger.error(f"Failed to save prediction to database: {e}")
-                        # Continue even if database save fails
+                        logger.error(f"Failed to send prediction to Kafka: {e}")
+                        # Continue even if Kafka send fails
+                else:
+                    logger.warning("Kafka not connected, prediction not sent")
 
                 logger.info(f"Prediction completed: {prediction}")
                 return {"prediction": prediction}
@@ -150,16 +172,12 @@ class ReviewAPI:
         @self.app.get("/predictions")
         async def get_predictions(limit: int = 10):
             """Get the latest predictions from the database."""
-            if not self.db_connected:
-                raise HTTPException(status_code=503, detail="Database not available")
-
-            try:
-                predictions = database.get_predictions(limit)
-                logger.info(f"Retrieved {len(predictions)} predictions from database")
-                return {"predictions": predictions}
-            except Exception as e:
-                logger.error(f"Error retrieving predictions: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+            # This endpoint is kept for backward compatibility
+            # but will return an informative message
+            raise HTTPException(
+                status_code=501,
+                detail="This endpoint is no longer available. Predictions are now sent to Kafka and stored by the consumer service."
+            )
 
         @self.app.get("/health")
         async def health_check():
@@ -167,7 +185,7 @@ class ReviewAPI:
             status = {
                 "status": "healthy",
                 "model_loaded": self.model is not None,
-                "database_connected": self.db_connected,
+                "kafka_connected": self.kafka_connected,
                 "vault_connected": self.vault_connected
             }
             logger.info(f"Health check: {status}")
@@ -191,6 +209,46 @@ class ReviewAPI:
             except Exception as e:
                 logger.error(f"Error checking Vault status: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/kafka-status")
+        async def kafka_status():
+            """Check Kafka status and connection."""
+            if not self.kafka_producer:
+                raise HTTPException(status_code=503, detail="Kafka producer not initialized")
+
+            try:
+                # Perform a real check by requesting metadata from the broker
+                bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+
+                # Try to get cluster metadata - this will fail if Kafka is not available
+                cluster_metadata = self.kafka_producer.bootstrap_connected()
+
+                # Try to send a test message to verify the connection
+                test_message = {
+                    "test": True,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+
+                # Send the message but don't wait for it to be delivered
+                future = self.kafka_producer.send('test-topic', test_message)
+
+                # Try to get metadata for 'test-topic'
+                topic_metadata = self.kafka_producer._client.cluster.available_partitions_for_topic('test-topic')
+
+                # If we got here, the connection is working
+                kafka_status = {
+                    "connected": True,
+                    "bootstrap_servers": bootstrap_servers,
+                    "cluster_metadata_available": cluster_metadata,
+                    "topic_metadata_available": topic_metadata is not None
+                }
+                logger.info(f"Kafka status: {kafka_status}")
+                return kafka_status
+            except Exception as e:
+                logger.error(f"Error checking Kafka status: {e}")
+                # Update the kafka_connected flag
+                self.kafka_connected = False
+                raise HTTPException(status_code=503, detail=f"Kafka connection error: {str(e)}")
 
         @self.app.on_event("startup")
         async def startup_event():

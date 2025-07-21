@@ -31,6 +31,9 @@ cat > /tmp/app-policy.hcl << EOF
 path "kv/data/database/*" {
   capabilities = ["read"]
 }
+path "kv/data/kafka/*" {
+  capabilities = ["read"]
+}
 EOF
 
 vault policy write app-policy /tmp/app-policy.hcl
@@ -45,6 +48,10 @@ vault kv put kv/database/credentials \
   dbname=${DB_NAME} \
   port=${DB_PORT} \
   host=postgres
+
+# Store Kafka credentials in Vault
+vault kv put kv/kafka/credentials \
+  bootstrap_servers=kafka:9092
 
 echo "Vault has been initialized and configured!"
 echo "App token: $(cat /vault/data/app_token.txt)"

@@ -38,6 +38,11 @@ if [ "$INIT_STATUS" = "true" ]; then
       port=${DB_PORT} \
       host=postgres
 
+    # Update Kafka credentials in Vault
+    echo "Updating Kafka credentials in Vault..."
+    vault kv put kv/kafka/credentials \
+      bootstrap_servers=kafka:9092
+
     echo "Vault configuration updated!"
   else
     echo "Root token not found. Cannot configure Vault."
