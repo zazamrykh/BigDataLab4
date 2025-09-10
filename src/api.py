@@ -20,6 +20,7 @@ from inference import InferenceEngine
 import database
 import hvac
 from kafka import KafkaProducer
+from utils import load_config
 
 # Configure logging
 logging.basicConfig(
@@ -44,6 +45,11 @@ class ReviewAPI:
         self.vault_connected = False
         self.kafka_producer = None
         self.kafka_connected = False
+
+        # Load configuration
+        self.config = load_config("src/config.ini")
+        self.kafka_topic = self.config.get("kafka", {}).get("topic_name", "predictions")
+        logger.info(f"Using Kafka topic: {self.kafka_topic}")
 
         # Initialize Vault client
         self._setup_vault()
@@ -184,8 +190,8 @@ class ReviewAPI:
                             "prediction": float(prediction),
                             "timestamp": datetime.datetime.now().isoformat()
                         }
-                        self.kafka_producer.send('predictions', message)
-                        logger.info(f"Prediction sent to Kafka topic 'predictions'")
+                        self.kafka_producer.send(self.kafka_topic, message)
+                        logger.info(f"Prediction sent to Kafka topic '{self.kafka_topic}'")
                     except Exception as e:
                         logger.error(f"Failed to send prediction to Kafka: {e}")
                         # Continue even if Kafka send fails
@@ -256,7 +262,8 @@ class ReviewAPI:
                 }
 
                 # Send the message but don't wait for it to be delivered
-                future = self.kafka_producer.send('test-topic', test_message)
+                test_topic = f"{self.kafka_topic}-test"
+                future = self.kafka_producer.send(test_topic, test_message)
 
                 # Try to get the result with a timeout
                 try:

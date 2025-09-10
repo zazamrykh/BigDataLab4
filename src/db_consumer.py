@@ -13,6 +13,7 @@ from kafka import KafkaConsumer
 import hvac
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from utils import load_config
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +33,11 @@ class DatabaseConsumer:
         self.db_connected = False
         self.kafka_consumer = None
         self.kafka_connected = False
+
+        # Load configuration
+        self.config = load_config("src/config.ini")
+        self.kafka_topic = self.config.get("kafka", {}).get("topic_name", "predictions")
+        logger.info(f"Using Kafka topic: {self.kafka_topic}")
 
         # Initialize Vault client
         self._setup_vault()
@@ -189,7 +195,7 @@ class DatabaseConsumer:
 
                 # Create Kafka consumer
                 self.kafka_consumer = KafkaConsumer(
-                    'predictions',
+                    self.kafka_topic,
                     bootstrap_servers=bootstrap_servers,
                     auto_offset_reset='earliest',
                     enable_auto_commit=True,
@@ -237,7 +243,7 @@ class DatabaseConsumer:
 
     def run(self):
         """Run the consumer"""
-        logger.info("Starting Kafka consumer...")
+        logger.info(f"Starting Kafka consumer for topic '{self.kafka_topic}'...")
 
         if not self.kafka_connected:
             logger.error("Kafka not connected, cannot consume messages")

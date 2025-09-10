@@ -14,21 +14,18 @@ jobs:
     - name: Install jq
       run: sudo apt-get update && sudo apt-get install -y jq
 
-    - name: Create temporary .env file for initialization
-      run: |
-        echo "DB_HOST=postgres" > .env
-        echo "DB_PORT=5432" >> .env
-        echo "DB_NAME=reviewdb" >> .env
-        echo "DB_USER=postgres" >> .env
-        echo "DB_PASSWORD=postgres" >> .env
-        echo "VAULT_ADDR=http://vault:8200" >> .env
-        echo "KAFKA_BOOTSTRAP_SERVERS=kafka:9092" >> .env
-
     - name: Pull Docker image
       run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/lab4-kafka-app:latest
 
-    - name: Start containers with docker compose
-      run: docker compose up -d
+    - name: Start containers with docker compose using parameters
+      run: |
+        chmod +x ./start.sh
+        ./start.sh \
+          --db-user=${{ secrets.DB_USER }} \
+          --db-password=${{ secrets.DB_PASSWORD }} \
+          --db-name=${{ secrets.DB_NAME }} \
+          --db-port=${{ secrets.DB_PORT }} \
+          --kafka-port=${{ secrets.KAFKA_PORT || '9092' }}
 
     - name: Wait for services to be ready
       run: |

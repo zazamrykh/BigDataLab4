@@ -7,10 +7,9 @@ This project extends BigDataLab3 by adding message queue integration using Apach
 The project consists of five Docker containers:
 1. **Vault**: HashiCorp Vault for secret management
 2. **Postgres**: PostgreSQL database for storing predictions
-3. **Zookeeper**: Required for Kafka operation
-4. **Kafka**: Message broker for asynchronous communication
-5. **App**: The machine learning model API (Producer)
-6. **DB-Consumer**: Service that consumes messages from Kafka and saves them to the database
+3. **Kafka**: Message broker for asynchronous communication
+4. **App**: The machine learning model API (Producer)
+5. **DB-Consumer**: Service that consumes messages from Kafka and saves them to the database
 
 ## Secret Management
 
@@ -34,13 +33,42 @@ The project uses Apache Kafka as a message broker to implement a publish-subscri
 ## Setup and Running
 
 1. Clone the repository
-2. Create a `.env` file based on `.env.example` (only needed for initial setup)
-3. Run the application:
+2. Run the application using the provided script with parameters:
    ```
-   docker-compose up -d
+   ./start.sh --db-user=postgres --db-password=your_password --db-name=reviewdb --db-port=5432
    ```
 
-During the first run, Vault will be initialized and the credentials will be stored in Vault. After that, the applications will retrieve the credentials from Vault instead of using environment variables.
+   Alternatively, you can use an environment file:
+   ```
+   ./start.sh --env-file=.env
+   ```
+
+The script will:
+1. Start Vault with database credentials
+2. Start PostgreSQL with initialization variables
+3. Start Kafka
+4. Start the application without database credentials (it will retrieve them from Vault)
+5. Start the database consumer
+
+This approach ensures that database credentials are only passed to the services that need them, and the application retrieves credentials only from Vault.
+
+### Command Line Options
+
+```
+Usage: ./start.sh [options]
+Options:
+  --db-user=USER         Database user (default: postgres)
+  --db-password=PASSWORD Database password (default: postgres)
+  --db-name=NAME         Database name (default: reviewdb)
+  --db-port=PORT         Database port (default: 5432)
+  --vault-addr=ADDR      Vault address (default: http://vault:8200)
+  --kafka-port=PORT      Kafka port (default: 9092)
+  --env-file=FILE        Environment file to use
+  --clean                Remove existing volumes before starting (use with caution!)
+  --help                 Show this help message
+```
+
+> **Note**: If you encounter issues with PostgreSQL authentication or "role does not exist" errors, try using the `--clean` flag to remove existing volumes and start fresh. This is especially useful when changing database credentials.
 
 ## API Endpoints
 
@@ -79,4 +107,3 @@ This script will:
 - curl -X POST "http://localhost:8000/predict" -H "Content-Type: application/json" -d '{"text": "This product is terrible!", "summary": "Product review"}'
 - sudo docker compose -f docker-compose.yml logs --tail=20 app
 - sudo docker compose -f docker-compose.yml logs --tail=20 db-consumer
-- 

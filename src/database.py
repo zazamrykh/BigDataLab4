@@ -91,7 +91,7 @@ def get_db_credentials_from_vault():
         return None
 
     try:
-        # Read database credentials from Vault
+        # Read database credentials from Vault using KV v2
         response = client.secrets.kv.v2.read_secret_version(
             path='database/credentials',
             mount_point='secret'
