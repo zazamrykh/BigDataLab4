@@ -35,7 +35,7 @@ The project uses Apache Kafka as a message broker to implement a publish-subscri
 1. Clone the repository
 2. Run the application using the provided script with parameters:
    ```
-   ./start.sh --db-user=postgres --db-password=your_password --db-name=reviewdb --db-port=5432
+   ./start.sh --db-user=postgres --db-password=postgres --db-name=reviewdb --db-port=5432 --kafka-port=9092 --clean
    ```
 
    Alternatively, you can use an environment file:

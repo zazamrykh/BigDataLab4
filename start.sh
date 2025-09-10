@@ -118,12 +118,16 @@ else
   export POSTGRES_USER=$DB_USER
   export POSTGRES_PASSWORD=$DB_PASSWORD
   export POSTGRES_DB=$DB_NAME
-  docker compose up -d postgres
+  echo "Using PostgreSQL credentials:"
+  echo "POSTGRES_USER=$POSTGRES_USER"
+  echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+  echo "POSTGRES_DB=$POSTGRES_DB"
+  POSTGRES_USER=$POSTGRES_USER POSTGRES_PASSWORD=$POSTGRES_PASSWORD POSTGRES_DB=$POSTGRES_DB docker compose up -d postgres
 
   # Wait for PostgreSQL to be ready
   echo "Waiting for PostgreSQL to be ready..."
   for i in {1..30}; do
-    if docker compose exec postgres pg_isready -U postgres > /dev/null 2>&1; then
+    if docker compose exec postgres pg_isready -U $POSTGRES_USER > /dev/null 2>&1; then
       echo "PostgreSQL is ready!"
       break
     fi
@@ -137,9 +141,10 @@ else
 
   # Step 3: Start Kafka
   echo "Starting Kafka service..."
-  # Export Kafka port
+  # Export Kafka port and print debug info
   export KAFKA_PORT
-  docker compose up -d kafka
+  echo "Using Kafka port: $KAFKA_PORT"
+  KAFKA_PORT=$KAFKA_PORT docker compose up -d kafka
 
   # Wait for Kafka to be ready
   echo "Waiting for Kafka to be ready..."
@@ -159,7 +164,7 @@ else
   # Step 4: Start the application without database credentials
   # App will get credentials from Vault
   echo "Starting application service..."
-  docker compose up -d app
+  KAFKA_PORT=$KAFKA_PORT docker compose up -d app
 
   # Step 5: Start the database consumer
   # Export DB variables for db-consumer as fallback
@@ -170,7 +175,13 @@ else
   export DB_NAME
   export DB_USER
   export DB_PASSWORD
-  docker compose up -d db-consumer
+  echo "Using DB credentials for consumer:"
+  echo "DB_HOST=$DB_HOST"
+  echo "DB_PORT=$DB_PORT"
+  echo "DB_NAME=$DB_NAME"
+  echo "DB_USER=$DB_USER"
+  echo "DB_PASSWORD=$DB_PASSWORD"
+  DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_NAME=$DB_NAME DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD KAFKA_PORT=$KAFKA_PORT docker compose up -d db-consumer
 
   echo "All services started successfully!"
 fi
