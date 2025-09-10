@@ -19,55 +19,63 @@ logger = logging.getLogger(__name__)
 vault_client = None
 vault_token_path = "/vault/data/app_token.txt"
 
-def get_vault_client():
+def get_vault_client(max_retries=5, retry_delay=5):
     """
     Creates or returns a Vault client.
+    Includes retry logic for better reliability when Vault is starting up.
+
+    Args:
+        max_retries: Maximum number of connection attempts
+        retry_delay: Delay between retries in seconds
 
     Returns:
         hvac.Client: Authenticated Vault client
     """
     global vault_client
 
-    if vault_client is not None:
+    if vault_client is not None and vault_client.is_authenticated():
         return vault_client
 
     # Get Vault address from environment variable
     vault_addr = os.environ.get("VAULT_ADDR", "http://vault:8200")
     logger.info(f"Using Vault address: {vault_addr}")
 
-    try:
-        # Create Vault client
-        logger.info(f"Creating Vault client with URL: {vault_addr}")
-        vault_client = hvac.Client(url=vault_addr)
-        logger.info(f"Created Vault client with URL: {vault_addr}")
-
-        # Use root token directly for testing
-        logger.info("Setting token to 'root'")
-        vault_client.token = "root"
-        logger.info("Set token to 'root'")
-
-        # Check if client is authenticated
-        logger.info("Checking if client is authenticated")
+    # Try to connect with retries
+    last_exception = None
+    for attempt in range(max_retries):
         try:
+            # Create Vault client
+            logger.info(f"Creating Vault client with URL: {vault_addr} (attempt {attempt + 1}/{max_retries})")
+            vault_client = hvac.Client(url=vault_addr)
+            logger.info(f"Created Vault client with URL: {vault_addr}")
+
+            # Use root token directly for testing
+            logger.info("Setting token to 'root'")
+            vault_client.token = "root"
+            logger.info("Set token to 'root'")
+
+            # Check if client is authenticated
+            logger.info("Checking if client is authenticated")
             is_auth = vault_client.is_authenticated()
             logger.info(f"Vault client authenticated: {is_auth}")
+
+            if is_auth:
+                logger.info("Successfully authenticated with Vault")
+                return vault_client
+            else:
+                logger.warning("Failed to authenticate with Vault")
+                vault_client = None
+
         except Exception as e:
-            logger.error(f"Error checking authentication: {e}")
-            is_auth = False
+            last_exception = e
+            logger.warning(f"Connection attempt {attempt + 1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
 
-        if is_auth:
-            logger.info("Successfully authenticated with Vault")
-        else:
-            logger.warning("Failed to authenticate with Vault")
-            vault_client = None
-
-    except Exception as e:
-        logger.error(f"Error connecting to Vault: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        vault_client = None
-
-    return vault_client
+    # If we get here, all retries failed
+    logger.error(f"Failed to connect to Vault after {max_retries} attempts. Last error: {last_exception}")
+    return None
 
 def get_db_credentials_from_vault():
     """
@@ -86,7 +94,7 @@ def get_db_credentials_from_vault():
         # Read database credentials from Vault
         response = client.secrets.kv.v2.read_secret_version(
             path='database/credentials',
-            mount_point='kv'
+            mount_point='secret'
         )
 
         if response and 'data' in response and 'data' in response['data']:

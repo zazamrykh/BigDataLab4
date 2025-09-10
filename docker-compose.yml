@@ -70,13 +70,21 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     networks:
       - kafka-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   app:
     build: .
     container_name: model-api
     depends_on:
-      - kafka
-      - vault
+      kafka:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - VAULT_ADDR=http://vault:8200
@@ -92,9 +100,12 @@ services:
     build: .
     container_name: db-consumer
     depends_on:
-      - kafka
-      - postgres
-      - vault
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - DB_HOST=postgres

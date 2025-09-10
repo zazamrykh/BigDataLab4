@@ -71,10 +71,16 @@ class DatabaseConsumer:
         if self.vault_connected:
             try:
                 # Read database credentials from Vault
+                # Добавляем логирование для отладки
+                logger.info("Attempting to read database credentials from Vault")
+
                 response = self.vault_client.secrets.kv.v2.read_secret_version(
                     path='database/credentials',
-                    mount_point='kv'
+                    mount_point='secret'
                 )
+
+                # Логируем структуру ответа для отладки
+                logger.info(f"Vault response structure: {json.dumps(response, default=str)}")
 
                 if response and 'data' in response and 'data' in response['data']:
                     logger.info("Successfully retrieved database credentials from Vault")
@@ -147,10 +153,16 @@ class DatabaseConsumer:
         if self.vault_connected:
             try:
                 # Read Kafka credentials from Vault
+                # Добавляем логирование для отладки
+                logger.info("Attempting to read Kafka credentials from Vault")
+
                 response = self.vault_client.secrets.kv.v2.read_secret_version(
                     path='kafka/credentials',
-                    mount_point='kv'
+                    mount_point='secret'
                 )
+
+                # Логируем структуру ответа для отладки
+                logger.info(f"Vault response structure: {json.dumps(response, default=str)}")
 
                 if response and 'data' in response and 'data' in response['data']:
                     logger.info("Successfully retrieved Kafka credentials from Vault")
