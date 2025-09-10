@@ -36,7 +36,7 @@ class DatabaseConsumer:
 
         # Load configuration
         self.config = load_config("src/config.ini")
-        self.kafka_topic = self.config.get("kafka", {}).get("topic_name", "predictions")
+        self.kafka_topic = self.config["kafka"]["topic_name"] if "kafka" in self.config and "topic_name" in self.config["kafka"] else "predictions"
         logger.info(f"Using Kafka topic: {self.kafka_topic}")
 
         # Initialize Vault client
